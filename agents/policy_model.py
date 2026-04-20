@@ -1,60 +1,54 @@
 import json
 from typing import Dict, Any
+from utils.helpers import extract_json, format_location
 
 class SirenAgentPolicy:
     """
-    Handles prompt generation and action parsing for the Mistral agent.
+    Enhanced agent policy for Mistral.
+    Generates prompts for the partially observable world state.
     """
     
-    SYSTEM_PROMPT = """You are the SirenWorld Dispatch AI. Your goal is to optimize emergency response.
-You will receive the current world state including SOS requests and resource availability.
-Analyze the situation, reason about the priority and resource allocation, and then output your decision in JSON format.
+    def __init__(self, model_name: str = "Mistral-7B-Instruct"):
+        self.model_name = model_name
 
-Your output MUST be a JSON object with the following structure:
-{
-    "thought": "Briefly explain your reasoning and priorities",
-    "event_id": "ID of the SOS event you are responding to",
-    "classification": "fire | medical | disaster | false_alarm",
-    "dispatch": ["LIST_OF_RESOURCE_IDs"],
-    "routing": "shortest | safest | efficient"
-}
-"""
+    def get_system_prompt(self) -> str:
+        return (
+            "You are the Emergency Response Dispatcher AI. Your objective is to save lives "
+            "and optimize resources in a dynamic disaster environment. You see a "
+            "partially observable view of the world.\n\n"
+            "Respond in JSON format with your reasoning (thought), the target SOS ID, "
+            "the classification, the resources to dispatch, and the routing strategy."
+        )
 
-    def generate_prompt(self, obs: Dict[str, Any]) -> str:
-        """
-        Convert observation dict to text prompt.
-        """
-        prompt = f"{self.SYSTEM_PROMPT}\n\n### Current State:\n"
+    def format_obs_for_prompt(self, obs: Dict[str, Any]) -> str:
+        """Convert observation dict to a clean text-based prompt for the LLM."""
+        prompt = f"### WORLD STATE (Time: {obs['env_conditions']['time']} | Weather: {obs['env_conditions']['weather']})\n\n"
         
-        # Format SOS Events
-        prompt += "Incoming SOS Requests:\n"
-        for sos in obs.get("incoming_sos", []):
-            prompt += f"- ID: {sos['id']}, Description: {sos['description']}, Severity Est: {sos['severity_estimate']}, Location: {sos['location']}\n"
-        
-        # Format Resources
-        prompt += "\nAvailable Resources:\n"
-        for res in obs.get("resources", []):
-            if res["status"] == "free":
-                prompt += f"- ID: {res['id']}, Type: {res['type']}, Location: {res['location']}\n"
-        
-        # Format Env
-        env = obs.get("environment", {})
-        prompt += f"\nEnvironment: Weather: {env.get('weather')}, Time: {env.get('time')} mins\n"
-        
-        prompt += "\n### Your Decision (JSON):"
+        prompt += "INCOMING SOS REQUESTS:\n"
+        if not obs["sos_requests"]:
+            prompt += "- None active.\n"
+        for sos in obs["sos_requests"]:
+            sev_label = ["LOW", "MEDIUM", "HIGH"][sos["severity_estimate"]]
+            prompt += f"- ID: {sos['id']} | Category: {sos['description']} | Severity: {sev_label} | Loc: {format_location(sos['location'])}\n"
+            
+        prompt += "\nRESOURCE STATUS:\n"
+        free_res = [r for r in obs["resource_status"] if r["status"] == "free"]
+        if not free_res:
+            prompt += "- No units available.\n"
+        for r in free_res:
+            prompt += f"- ID: {r['id']} | Type: {r['type']} | Loc: {format_location(r['location'])}\n"
+            
         return prompt
 
-    def parse_action(self, response: str) -> str:
-        """
-        Extract the JSON part from the model's response.
-        """
-        try:
-            # Look for JSON block
-            if "{" in response:
-                json_part = response[response.find("{"):response.rfind("}")+1]
-                # Validate it's reachable JSON
-                json.loads(json_part)
-                return json_part
-            return "{}"
-        except:
-            return "{}"
+    def generate_full_prompt(self, obs: Dict[str, Any]) -> str:
+        system = self.get_system_prompt()
+        state_text = self.format_obs_for_prompt(obs)
+        
+        return (
+            f"<s>[INST] {system}\n\n{state_text}\n"
+            "Output your decision in JSON format: [/INST]"
+        )
+
+    def parse_response(self, response: str) -> Dict[str, Any]:
+        """Extract and clean the JSON response from the LLM."""
+        return extract_json(response)

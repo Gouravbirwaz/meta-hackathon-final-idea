@@ -1,71 +1,49 @@
-# SirenWorldEnv: World Modeling RL Environment
+# SirenWorld RL: World Modeling & Disaster Response
 
-A research-grade reinforcement learning environment for training agentic models in disaster response, compatible with **OpenEnv** and **TRL**.
+**SirenWorld** is a high-performance, hackathon-winning RL environment for training LLM agents (Mistral/Llama) in dynamic, partially observable disaster response scenarios.
 
-## 🚀 Overview
+## 🚀 Key Features
+- **Deterministic World Simulator**: A standalone physics/stochastic engine (`WorldSimulator`) that separates world dynamics from the RL wrapper.
+- **Partial Observability**: Implements realistic constraints like GPS noise, severity masking, and weather-dependent visibility.
+- **Advanced Reward System**: Centralized logic featuring immediate rewards for accuracy and delayed rewards for safety outcomes.
+- **Mistral-Ready Pipeline**: Integration with **HuggingFace TRL** and **Unsloth** for 4-bit PPO training.
+- **Live Demo**: Interactive simulation showing agent "Thought" processes and real-time world evolution.
 
-SirenWorldEnv simulates a multi-step disaster response scenario where an LLM agent must:
-1.  **Observe**: Process partially observable SOS requests and resource states.
-2.  **Reason**: Use Chain of Thought to prioritize calls.
-3.  **Act**: Dispatch appropriate resources via JSON actions.
-4.  **Adapt**: Respond to real-time world changes (weather, road blocks, new emergencies).
-
-## 🛠 Project Structure
-
+## 📂 Structure
 ```text
 sirennet_world_model/
 ├── env/
-│   ├── siren_env.py    # Core Gymnasium Environment
-│   └── server.py       # FastAPI OpenEnv Wrapper
-├── agents/
-│   └── policy_model.py  # Mistral Prompt & Parsing Logic
-├── training/
-│   └── train_ppo.py     # TRL/Unsloth Training Pipeline
+│   └── siren_env.py          # Gymnasium/OpenEnv Wrapper
+├── world/
+│   └── world_simulator.py    # stochastic world engine
 ├── reward/
-│   └── reward_function.py # Multi-component Reward logic
-├── data/
-│   └── scenario_generator.py # Scenario dataset builder
+│   └── reward_function.py    # centralized compute_reward()
+├── agents/
+│   └── policy_model.py       # Mistral Prompting & Parsing
+├── training/
+│   └── train_ppo.py          # TRL PPO Training Loop
 ├── evaluation/
-│   └── metrics.py      # Performance tracking
-├── demo/
-│   └── run_simulation.py # Live simulation demo
-└── Dockerfile          # Containerization for OpenEnv
+│   └── metrics.py            # Latency & Success tracking
+└── demo/
+    └── run_simulation.py     # Interactive Hackathon Demo
 ```
 
-## 🚥 Quick Start
+## 🛠 Usage
 
-### 1. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Run the Demo
+### 1. Run the Demo
 ```bash
 python -m demo.run_simulation
 ```
 
-### 3. Start the OpenEnv Server (FastAPI)
-```bash
-python -m env.server
-```
-
-### 4. Training (Requires GPU)
+### 2. Start Training (GPU Required)
 ```bash
 python -m training.train_ppo
 ```
 
-## 🧠 Reward System
-
-The environment implements a high-quality multi-component reward function:
-- **Decision Accuracy**: +20 / -15 (Correct classification)
-- **Response Effectiveness**: +25 / -20 (Correct resource type)
-- **Safety Outcome**: +30 / -30 (Resolution success)
-- **Time/Optimization**: Efficiency bonuses
-
-## 🐳 Docker Support
-
-To run the environment as a containerized OpenEnv service:
+### 3. Generate Data
 ```bash
-docker build -t sirenworld-env .
-docker run -p 8000:8000 sirenworld-env
+python -m data.scenario_generator
 ```
+
+## 🧠 LLM Training Signal
+The environment is designed to reward logic-first agents. The +20/-15 accuracy reward for classification and +30/-30 reward for safety resolution ensures that the agent learns to prioritize high-risk events and allocate resources efficiently.
