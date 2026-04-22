@@ -1,0 +1,137 @@
+{
+  "state": "Karnataka",
+  "year": "2024-25",
+  "data_source": "Karnataka Dept of Agriculture + NABARD Karnataka State Focus Paper 2024-25",
+  "last_updated": "2025-01-01",
+
+  "schemes": [
+    {
+      "id": "pmkisan_input",
+      "name": "PM-KISAN Input Supplement",
+      "full_name": "Pradhan Mantri Kisan Samman Nidhi — Input Cost Supplement",
+      "benefit_inr": 2000,
+      "benefit_type": "direct_benefit_transfer",
+      "eligibility": {
+        "land_acres_max": 5,
+        "crop": ["tomato", "potato", "onion", "all vegetables"],
+        "district": ["Kolar", "Chikkaballapur", "Tumkur", "all Karnataka"],
+        "category": "all farmers"
+      },
+      "deadline_day_from_sowing": 30,
+      "required_documents": [
+        "Aadhaar card",
+        "Land records (RTC / pahani)",
+        "Bank passbook (linked to Aadhaar)",
+        "Mobile number linked to Aadhaar"
+      ],
+      "application_portal": "https://pmkisan.gov.in/BeneficiaryStatus.aspx",
+      "helpline": "155261",
+      "processing_days": 7,
+      "notes": "DBT transferred directly to bank account. No middlemen."
+    },
+    {
+      "id": "pmfby_insurance",
+      "name": "Crop Insurance PMFBY",
+      "full_name": "Pradhan Mantri Fasal Bima Yojana",
+      "benefit_inr": 3000,
+      "premium_farmer_inr": 500,
+      "net_benefit_inr": 2500,
+      "benefit_type": "insurance_payout",
+      "coverage": "All weather risks including drought, flood, pest, hailstorm",
+      "eligibility": {
+        "land_acres_max": 10,
+        "crop": ["tomato", "all notified crops"],
+        "district": ["all Karnataka"]
+      },
+      "deadline_day_from_sowing": 20,
+      "required_documents": [
+        "Aadhaar card",
+        "Land records (RTC)",
+        "Crop sowing certificate (from Village Accountant)",
+        "Bank account details"
+      ],
+      "application_portal": "https://pmfby.gov.in",
+      "helpline": "14447",
+      "notes": "Claims paid within 2 months of crop failure. Must register before crop is sown or within 7 days."
+    },
+    {
+      "id": "drip_subsidy",
+      "name": "Drip Irrigation Subsidy",
+      "full_name": "Karnataka Micro Irrigation Scheme — PMKSY Component",
+      "benefit_inr": 5000,
+      "benefit_type": "capital_subsidy",
+      "subsidy_pct_of_cost": 55,
+      "eligibility": {
+        "land_acres_max": 5,
+        "crop": ["tomato", "vegetables", "fruits"],
+        "district": ["all Karnataka"],
+        "category": "SC/ST farmers get additional 10%"
+      },
+      "deadline_day_from_sowing": 50,
+      "required_documents": [
+        "Drip/sprinkler system purchase invoice",
+        "Aadhaar card",
+        "Land records (RTC)",
+        "Caste certificate (for SC/ST bonus)",
+        "Installation certificate from approved vendor"
+      ],
+      "application_portal": "https://raitamitra.karnataka.gov.in/micro_irrigation",
+      "helpline": "080-22370060",
+      "notes": "Must be applied through nearest Raitha Seva Kendra (RSK). Equipment must be BIS certified."
+    },
+    {
+      "id": "tomato_support",
+      "name": "Tomato Special Support Price",
+      "full_name": "Kolar-Chikkaballapur Tomato Growers Support Scheme 2024-25",
+      "benefit_inr": 1500,
+      "benefit_type": "price_support",
+      "minimum_support_price_per_kg": 8.0,
+      "eligibility": {
+        "land_acres_max": 5,
+        "crop": ["tomato"],
+        "district": ["Kolar", "Chikkaballapur"],
+        "min_quantity_kg": 500
+      },
+      "deadline_day_from_sowing": 70,
+      "required_documents": [
+        "Mandi sale receipt (from APMC mandi)",
+        "Aadhaar card",
+        "Bank account linked to Aadhaar",
+        "Farmer ID / Kisan card"
+      ],
+      "application_portal": "https://krishimela.karnataka.gov.in/tomato-support",
+      "helpline": "08152-222200",
+      "notes": "Activated when mandi price falls below ₹8/kg. In 2024, activated for 45 days."
+    }
+  ],
+
+  "credit_schemes": [
+    {
+      "name": "Kisan Credit Card (KCC)",
+      "max_loan_inr": 25000,
+      "interest_rate_pct": 7.0,
+      "interest_subvention_pct": 2.0,
+      "effective_rate_pct": 5.0,
+      "repayment_days": 180,
+      "eligibility": "All farmers with land records, no existing default",
+      "bank": "Cooperative banks, SBI, Canara Bank",
+      "helpline": "1800-180-1551"
+    },
+    {
+      "name": "NABARD Joint Liability Group Loan",
+      "max_loan_inr": 50000,
+      "interest_rate_pct": 10.0,
+      "repayment_days": 365,
+      "eligibility": "Groups of 4-10 farmers, no individual collateral needed",
+      "bank": "Regional Rural Banks, Cooperative banks"
+    }
+  ],
+
+  "summary": {
+    "total_direct_benefit_inr": 11500,
+    "total_schemes": 4,
+    "most_urgent_deadline_day": 20,
+    "most_valuable_scheme": "Drip Irrigation Subsidy (₹5,000)",
+    "note": "All amounts are Karnataka 2024-25 actuals. Schemes subject to annual budget revision."
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "crop": "tomato",
+  "variety": "Arka Rakshak (hybrid) — Kolar district preferred",
+  "farm_area_acres": 2.0,
+  "data_source": "IIHR Bangalore + Karnataka Dept of Agriculture 2024-25",
+  "season_duration_days": 90,
+
+  "growth_stages": [
+    {
+      "stage": "seedling",
+      "day_range": [0, 15],
+      "description": "Transplantation to establishment. High moisture need. Root sensitive.",
+      "optimal_soil_moisture_pct": [65, 80],
+      "water_requirement_liters_per_day": 1200,
+      "fertilizer_response": "low — roots not established",
+      "pesticide_sensitivity": "moderate",
+      "yield_contribution_pct": 0,
+      "management_priority": "Irrigation + establishment. Avoid fertilizer burn."
+    },
+    {
+      "stage": "vegetative",
+      "day_range": [16, 40],
+      "description": "Rapid leaf and stem growth. Nitrogen demand peaks.",
+      "optimal_soil_moisture_pct": [60, 75],
+      "water_requirement_liters_per_day": 1600,
+      "fertilizer_response": "high — nitrogen uptake maximum",
+      "pesticide_sensitivity": "moderate",
+      "yield_contribution_pct": 0,
+      "management_priority": "Fertilize (N-rich). Scout for aphids/whitefly. Drip irrigation optimal."
+    },
+    {
+      "stage": "flowering",
+      "day_range": [41, 60],
+      "description": "Flower set determines final fruit count. Critical pollination window.",
+      "optimal_soil_moisture_pct": [55, 70],
+      "water_requirement_liters_per_day": 1800,
+      "fertilizer_response": "moderate — phosphorus for flower set",
+      "pesticide_sensitivity": "HIGH — pollinators active. No chemical sprays unless CRITICAL pest.",
+      "yield_contribution_pct": 0,
+      "management_priority": "DO NOT spray unless pest_alert = CRITICAL. Maintain soil moisture."
+    },
+    {
+      "stage": "fruiting",
+      "day_range": [61, 80],
+      "description": "Fruit fill and sizing. Yield builds daily. Moisture critical for fruit quality.",
+      "optimal_soil_moisture_pct": [60, 75],
+      "water_requirement_liters_per_day": 2200,
+      "fertilizer_response": "high — potassium for fruit quality and size",
+      "pesticide_sensitivity": "low — fruits developing",
+      "yield_contribution_pct": 90,
+      "management_priority": "Soil moisture > 40% mandatory. Fertilize K. Check mandi prices weekly."
+    },
+    {
+      "stage": "harvest",
+      "day_range": [81, 90],
+      "description": "Fruits mature and ready for market. Price timing critical.",
+      "optimal_soil_moisture_pct": [50, 65],
+      "water_requirement_liters_per_day": 1000,
+      "fertilizer_response": "none — fruiting complete",
+      "pesticide_sensitivity": "low",
+      "yield_contribution_pct": 10,
+      "management_priority": "Check mandi_price daily. Sell at price spike. Watch for post-harvest rot."
+    }
+  ],
+
+  "yield_model": {
+    "base_yield_kg_2acres": 8000,
+    "optimal_yield_kg_2acres": 10000,
+    "distress_sale_price_per_kg": 10.0,
+    "yield_loss_factors": {
+      "drought_stress_per_day_kg": 50,
+      "pest_damage_per_day_kg": 100,
+      "waterlogging_per_day_kg": 30,
+      "pollinator_kill_pct": 15,
+      "wrong_stage_fertilizer_pct": 2
+    },
+    "yield_boost_factors": {
+      "optimal_fertilizer_vegetative_pct": 5,
+      "optimal_fertilizer_fruiting_pct": 5,
+      "timely_pest_treatment_pct": 0
+    }
+  },
+
+  "cost_model_inr": {
+    "transplanting": 3000,
+    "irrigation_per_event": 200,
+    "fertilizer_per_application": 600,
+    "pesticide_per_spray": 800,
+    "harvesting_labour": 2000,
+    "transport_to_mandi": 500,
+    "total_fixed_costs_estimate": 8000
+  },
+
+  "water_requirements": {
+    "total_season_liters_optimal": 180000,
+    "per_irrigation_event_liters": 2000,
+    "drip_irrigation_saving_pct": 35,
+    "flood_irrigation_waste_pct": 40
+  },
+
+  "mandi_price_history_kolar": {
+    "min_price_per_kg": 8.0,
+    "max_price_per_kg": 45.0,
+    "typical_base_range": [12, 18],
+    "spike_range": [25, 35],
+    "distress_price": 10.0,
+    "market": "KR Puram Wholesale Market, Bangalore",
+    "price_driver": "Supply from Kolar/Chikkaballapur + demand from Bangalore"
+  }
+}
