@@ -1,0 +1,386 @@
+"""
+KisanAgent Inference Script
+=============================
+Agent entry point — mirrors Round 1 inference.py pattern exactly.
+
+- Uses openai SDK (LiteLLM proxy compatible)
+- Retry logic with exponential backoff
+- Full ReAct loop: calls tools → decides → steps env
+- Calls /reset → loop(/tools/{name} + /step) → prints final scores
+
+Environment variables:
+  ENV_SERVER_URL  — KisanAgent FastAPI server (default: http://localhost:8000)
+  API_KEY         — LLM API key (LiteLLM proxy or OpenAI)
+  API_BASE_URL    — LLM base URL for proxy routing
+  MODEL_NAME      — Model to use (default: gpt-4o)
+  DIFFICULTY      — Season difficulty: easy | medium | hard
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from typing import Any, Dict, List, Optional
+
+import requests
+from openai import OpenAI
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger("kisanagent.inference")
+
+# ── Config ──────────────────────────────────────────────────────────────────────
+ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8000")
+API_KEY = os.getenv("API_KEY", "sk-placeholder")
+API_BASE_URL = os.getenv("API_BASE_URL", "")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
+DIFFICULTY = os.getenv("DIFFICULTY", "medium")
+
+# Initialise OpenAI client — compatible with LiteLLM proxy
+_client_kwargs: Dict[str, Any] = {"api_key": API_KEY}
+if API_BASE_URL:
+    _client_kwargs["base_url"] = API_BASE_URL
+
+client = OpenAI(**_client_kwargs)
+
+# ── System Prompt ────────────────────────────────────────────────────────────────
+SYSTEM_PROMPT = """You are KisanAgent, an AI agricultural advisor for Harish — a 
+smallholder tomato farmer with 2 acres in Kolar district, Karnataka, India.
+
+Your goal: maximize Harish's net income across a 90-day tomato season.
+Harish starts with ₹15,000 cash. A good season yields ₹25,000–₹40,000 net income.
+
+════════════════════════════════════════
+AVAILABLE TOOLS (call via tool_to_call)
+════════════════════════════════════════
+- weather      : IMD Karnataka 3-day forecast (noisy, can be unavailable)
+- soil         : IoT soil moisture, pH, nitrogen readings (±5% sensor noise)
+- mandi_price  : Today's tomato price at KR Puram Bangalore (₹12–35/kg)
+- govt_scheme  : Karnataka Raitha Seva Kendra — active subsidies & deadlines
+- pest_alert   : Dept of Agriculture pest surveillance — Kolar region
+- credit       : KCC / NABARD microfinance — loan eligibility check
+
+════════════════════════════════════════
+FARM DECISIONS (choose exactly one)
+════════════════════════════════════════
+irrigate         — costs ₹200, adds 20% soil moisture
+fertilize        — costs ₹600, boosts yield if vegetative/fruiting stage
+spray_pesticide  — costs ₹800, treats pests (WARNING: kills pollinators if flowering + no pest)
+sell_now         — sell current harvestable yield at today's mandi price (harvest stage only)
+hold_crop        — wait for better price (harvest stage)
+apply_scheme     — claim active government scheme benefit
+take_loan        — borrow from KCC (₹10,000, 7% p.a., 180 days)
+do_nothing       — no action
+
+════════════════════════════════════════
+DECISION RULES
+════════════════════════════════════════
+1. ALWAYS call at least one relevant tool before deciding (budget: 3/day)
+2. NEVER spray_pesticide during flowering (days 41–60) without checking pest_alert first
+3. ALWAYS check mandi_price before sell_now or hold_crop
+4. Check govt_scheme every 10 days — scheme deadlines are real, missing them loses ₹1,500–₹5,000
+5. Soil moisture below 40% during fruiting (days 61–80) = permanent yield loss
+6. Pest outbreaks escalate: LOW→MEDIUM→HIGH→CRITICAL over 6 days — treat within 4 days
+
+════════════════════════════════════════
+RESPONSE FORMAT (strict JSON only)
+════════════════════════════════════════
+{
+  "reasoning": "2-3 sentences: what you observed, why you are doing this",
+  "tool_to_call": "tool_name OR null if done calling tools",
+  "farm_decision": "decision_name OR null if calling a tool"
+}
+
+Exactly one of tool_to_call or farm_decision must be non-null per response.
+"""
+
+# ── Tool Caller ──────────────────────────────────────────────────────────────────
+
+def call_tool(
+    tool_name: str,
+    args: Dict[str, Any] = None,
+    retries: int = 3,
+) -> Dict[str, Any]:
+    """
+    Call environment tool with exponential backoff retry.
+    Returns tool result dict, or error dict on failure.
+    """
+    args = args or {}
+    for attempt in range(retries):
+        try:
+            r = requests.post(
+                f"{ENV_SERVER}/tools/{tool_name}",
+                json={"args": args},
+                timeout=15,
+            )
+            if r.status_code == 429:
+                return {
+                    "error": "tool_budget_exceeded",
+                    "message": r.json().get("detail", "Tool budget exceeded."),
+                }
+            if r.status_code == 400:
+                return {"error": "no_season", "message": r.json().get("detail", "")}
+            r.raise_for_status()
+            return r.json()["result"]
+        except Exception as exc:
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                logger.warning("Tool %s attempt %d failed: %s. Retrying in %ds...", tool_name, attempt + 1, exc, wait)
+                time.sleep(wait)
+            else:
+                logger.error("Tool %s all retries exhausted: %s", tool_name, exc)
+                return {"error": str(exc)}
+
+
+# ── Env Callers ──────────────────────────────────────────────────────────────────
+
+def reset_env(difficulty: str = "medium", seed: Optional[int] = None) -> Dict[str, Any]:
+    """POST /reset — start new season."""
+    payload: Dict[str, Any] = {"difficulty": difficulty}
+    if seed is not None:
+        payload["seed"] = seed
+    r = requests.post(f"{ENV_SERVER}/reset", json=payload, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
+def step_env(
+    farm_decision: str,
+    tool_calls_made: List[str],
+    reasoning: str,
+) -> Dict[str, Any]:
+    """POST /step — advance one day."""
+    r = requests.post(
+        f"{ENV_SERVER}/step",
+        json={
+            "farm_decision": farm_decision,
+            "tool_calls_made": tool_calls_made,
+            "reasoning": reasoning,
+        },
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+# ── LLM Caller ───────────────────────────────────────────────────────────────────
+
+def llm_call(
+    messages: List[Dict[str, Any]],
+    retries: int = 3,
+) -> str:
+    """
+    LiteLLM proxy / OpenAI call with exponential backoff.
+    Forces JSON response format.
+    """
+    for attempt in range(retries):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=512,
+                response_format={"type": "json_object"},
+            )
+            return response.choices[0].message.content
+        except Exception as exc:
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                logger.warning("LLM attempt %d failed: %s. Retry in %ds...", attempt + 1, exc, wait)
+                time.sleep(wait)
+            else:
+                raise RuntimeError(f"LLM call failed after {retries} attempts: {exc}") from exc
+
+
+def _safe_parse_llm(raw: str) -> Dict[str, Any]:
+    """Parse LLM JSON response with fallback."""
+    try:
+        parsed = json.loads(raw)
+        return parsed
+    except json.JSONDecodeError:
+        logger.error("LLM returned invalid JSON: %s", raw[:200])
+        return {
+            "reasoning": "Parse error — defaulting to safe action.",
+            "tool_to_call": None,
+            "farm_decision": "do_nothing",
+        }
+
+
+# ── Main Agent Loop ───────────────────────────────────────────────────────────────
+
+def run_episode(
+    difficulty: str = "medium",
+    seed: Optional[int] = None,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """
+    Full 90-day episode loop.
+
+    Pattern: reset → for each day → ReAct(tools) → decide → step
+    Returns final result dict with net_income_inr and final_scores.
+    """
+    if verbose:
+        print(f"\n{'🌾 '*20}")
+        print(f"🌾  KisanAgent — Season Start")
+        print(f"    Difficulty: {difficulty.upper()} | Model: {MODEL_NAME}")
+        print(f"{'🌾 '*20}\n")
+
+    # ── Reset environment ───────────────────────────────────────
+    reset_data = reset_env(difficulty=difficulty, seed=seed)
+    observation = reset_data["observation"]
+    season_id = reset_data["season_id"]
+    info = reset_data.get("info", {})
+
+    if verbose:
+        print(f"Season ID: {season_id}")
+        print(f"Optimal income: ₹{info.get('optimal_income_inr', 40000):,.0f}")
+        print(f"Schemes available: {', '.join(info.get('schemes_available', []))}")
+        print(f"Pest events scheduled: {info.get('pest_events_scheduled', 0)}\n")
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    episode_rewards: List[float] = []
+
+    # ── 90-day loop ─────────────────────────────────────────────
+    for _day_iter in range(90):
+        day = observation["day"]
+        stage = observation["crop_stage"]
+        balance = observation["bank_balance_inr"]
+        yield_kg = observation["estimated_yield_kg"]
+        alerts = observation.get("active_alerts", [])
+
+        if verbose:
+            print(
+                f"📅 Day {day:>2} | {stage:<12} | "
+                f"₹{balance:>8,.0f} | {yield_kg:>6.0f}kg"
+                + (f" | ⚠ {alerts[0]}" if alerts else "")
+            )
+
+        # Build user message with current state
+        user_msg = (
+            f"CURRENT STATE — Day {day}\n"
+            f"Crop stage:       {stage}\n"
+            f"Estimated yield:  {yield_kg:.0f} kg\n"
+            f"Bank balance:     ₹{balance:,.0f}\n"
+            f"Days to harvest:  {observation['days_to_harvest']}\n"
+            f"Soil moisture:    {observation['soil_moisture_pct']:.1f}%\n"
+            f"Weather:          {observation['weather_summary']}\n"
+            f"Tool calls left:  {observation['tool_calls_remaining']}/3\n"
+            f"Active alerts:    {alerts if alerts else 'None'}\n\n"
+            "What is your next action? "
+            "Call a tool (tool_to_call) or make your farm_decision."
+        )
+        messages.append({"role": "user", "content": user_msg})
+
+        # ── ReAct inner loop ──────────────────────────────────────
+        tool_calls_made: List[str] = []
+        farm_decision: Optional[str] = None
+        day_reasoning: str = ""
+
+        while farm_decision is None:
+            raw = llm_call(messages)
+            parsed = _safe_parse_llm(raw)
+
+            day_reasoning = parsed.get("reasoning", "")
+            tool_to_call = parsed.get("tool_to_call")
+            farm_decision = parsed.get("farm_decision")
+
+            messages.append({"role": "assistant", "content": raw})
+
+            if tool_to_call and not farm_decision:
+                # Call the tool
+                tool_result = call_tool(tool_to_call)
+
+                if tool_result.get("error") == "tool_budget_exceeded":
+                    # Force the agent to decide
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            "⚠️ Tool budget exceeded (3/3 used). "
+                            "You must make your farm_decision NOW. "
+                            "Respond with farm_decision, not tool_to_call."
+                        ),
+                    })
+                    farm_decision = None  # LLM must give a decision next
+                else:
+                    tool_calls_made.append(tool_to_call)
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"Tool result ({tool_to_call}):\n"
+                            f"{json.dumps(tool_result, indent=2, ensure_ascii=False)}\n\n"
+                            "Continue: call another tool OR make your farm_decision."
+                        ),
+                    })
+                    logger.info("  Tool %s called (call %d/3)", tool_to_call, len(tool_calls_made))
+
+            elif farm_decision and tool_to_call:
+                # LLM gave both — prefer the decision, ignore tool
+                logger.debug("LLM gave both tool and decision; using decision.")
+                tool_to_call = None
+
+            elif not farm_decision and not tool_to_call:
+                # LLM gave neither — force do_nothing
+                logger.warning("LLM gave neither tool nor decision; defaulting to do_nothing.")
+                farm_decision = "do_nothing"
+
+        # ── Step the environment ─────────────────────────────────
+        try:
+            step_result = step_env(
+                farm_decision=farm_decision,
+                tool_calls_made=tool_calls_made,
+                reasoning=day_reasoning,
+            )
+        except Exception as exc:
+            logger.error("Step failed on day %d: %s", day, exc)
+            break
+
+        observation = step_result["observation"]
+        reward = step_result["reward"]
+        terminated = step_result["terminated"]
+        episode_rewards.append(reward)
+
+        if verbose:
+            step_sc = step_result.get("step_scores") or {}
+            print(
+                f"   ↳ {farm_decision:<18} | tools: {tool_calls_made} | "
+                f"reward: {reward:.3f}"
+            )
+
+        # ── Terminal ─────────────────────────────────────────────
+        if terminated:
+            final_scores = step_result.get("final_scores", {})
+            net_income = step_result.get("net_income_inr", 0.0)
+
+            if verbose:
+                print(f"\n{'═'*55}")
+                print(f"🏁 SEASON COMPLETE — Day 90")
+                print(f"{'═'*55}")
+                print(f"💰 Net Income:       ₹{net_income:>10,.0f}")
+                print(f"📊 Composite Score:  {final_scores.get('composite_score', 0):.4f}")
+                print(f"   Income Score:     {final_scores.get('income_score', 0):.4f}")
+                print(f"   Tool Quality:     {final_scores.get('tool_use_quality', 0):.4f}")
+                print(f"   Pest Response:    {final_scores.get('pest_response_accuracy', 0):.4f}")
+                print(f"   Scheme Capture:   {final_scores.get('scheme_capture_rate', 0):.4f}")
+                print(f"   Sustainability:   {final_scores.get('sustainability_score', 0):.4f}")
+                print(f"{'═'*55}\n")
+
+            return {
+                "season_id": season_id,
+                "net_income_inr": net_income,
+                "final_scores": final_scores,
+                "total_reward": round(sum(episode_rewards), 4),
+                "episode_length": day + 1,
+            }
+
+    return {"error": "Episode did not terminate cleanly."}
+
+
+# ── Entry Point ───────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    result = run_episode(difficulty=DIFFICULTY)
+    print(f"\nFinal result:\n{json.dumps(result, indent=2, ensure_ascii=False)}")
