@@ -3,16 +3,20 @@ KisanAgent Inference Script
 =============================
 Agent entry point — mirrors Round 1 inference.py pattern exactly.
 
-- Uses openai SDK (LiteLLM proxy compatible)
+- Uses openai SDK (Groq-compatible via openai base_url)
+- Auto-loads from .env via python-dotenv
 - Retry logic with exponential backoff
 - Full ReAct loop: calls tools → decides → steps env
 - Calls /reset → loop(/tools/{name} + /step) → prints final scores
 
-Environment variables:
+Groq endpoint: https://api.groq.com/openai/v1
+Default model: llama-3.3-70b-versatile
+
+Environment variables (loaded from .env automatically):
   ENV_SERVER_URL  — KisanAgent FastAPI server (default: http://localhost:8000)
-  API_KEY         — LLM API key (LiteLLM proxy or OpenAI)
-  API_BASE_URL    — LLM base URL for proxy routing
-  MODEL_NAME      — Model to use (default: gpt-4o)
+  API_KEY         — Groq API key (GROQ_API_KEY also accepted)
+  API_BASE_URL    — Groq base URL (default: https://api.groq.com/openai/v1)
+  MODEL_NAME      — Groq model (default: llama-3.3-70b-versatile)
   DIFFICULTY      — Season difficulty: easy | medium | hard
 """
 
@@ -25,7 +29,11 @@ import time
 from typing import Any, Dict, List, Optional
 
 import requests
+from dotenv import load_dotenv
 from openai import OpenAI
+
+# ── Load .env (must happen before os.getenv calls) ────────────────────────────
+load_dotenv()  # reads .env from cwd or any parent directory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,19 +41,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("kisanagent.inference")
 
-# ── Config ──────────────────────────────────────────────────────────────────────
+# ── Config (Groq defaults) ───────────────────────────────────────────────────
 ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8000")
-API_KEY = os.getenv("API_KEY", "sk-placeholder")
-API_BASE_URL = os.getenv("API_BASE_URL", "")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
+
+# Accept either API_KEY or GROQ_API_KEY env var
+API_KEY = (
+    os.getenv("API_KEY")
+    or os.getenv("GROQ_API_KEY")
+    or "sk-placeholder"
+)
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 DIFFICULTY = os.getenv("DIFFICULTY", "medium")
 
-# Initialise OpenAI client — compatible with LiteLLM proxy
-_client_kwargs: Dict[str, Any] = {"api_key": API_KEY}
-if API_BASE_URL:
-    _client_kwargs["base_url"] = API_BASE_URL
+# ── Groq OpenAI-compatible client ────────────────────────────────────────────
+client = OpenAI(
+    api_key=API_KEY,
+    base_url=API_BASE_URL,
+)
 
-client = OpenAI(**_client_kwargs)
+logger.info("KisanAgent inference using model=%s  base_url=%s", MODEL_NAME, API_BASE_URL)
 
 # ── System Prompt ────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are KisanAgent, an AI agricultural advisor for Harish — a 
@@ -174,8 +189,9 @@ def llm_call(
     retries: int = 3,
 ) -> str:
     """
-    LiteLLM proxy / OpenAI call with exponential backoff.
-    Forces JSON response format.
+    Groq (OpenAI-compatible) call with exponential backoff.
+    Requests JSON object response mode — supported by all Groq Llama models.
+    Falls back to plain completion if JSON mode rejected.
     """
     for attempt in range(retries):
         try:
@@ -186,7 +202,28 @@ def llm_call(
                 max_tokens=512,
                 response_format={"type": "json_object"},
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            # Validate parseable before returning
+            json.loads(content)  # raises if invalid
+            return content
+        except json.JSONDecodeError:
+            # Model returned non-JSON — retry with explicit instruction
+            logger.warning("LLM returned non-JSON on attempt %d; retrying with JSON reminder.", attempt + 1)
+            if attempt < retries - 1:
+                # Inject reminder into last user message copy
+                reminder_messages = messages + [{
+                    "role": "user",
+                    "content": "IMPORTANT: Your response MUST be valid JSON only. No prose, no markdown fences."
+                }]
+                messages = reminder_messages
+                time.sleep(1)
+            else:
+                # Return safe default
+                return json.dumps({
+                    "reasoning": "JSON parse error — safe default.",
+                    "tool_to_call": None,
+                    "farm_decision": "do_nothing",
+                })
         except Exception as exc:
             if attempt < retries - 1:
                 wait = 2 ** attempt
