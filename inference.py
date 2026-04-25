@@ -35,7 +35,7 @@ if sys.platform == "win32":
 
 import requests
 from dotenv import load_dotenv
-from openai import OpenAI
+from dotenv import load_dotenv
 
 # ── Load .env (must happen before os.getenv calls) ────────────────────────────
 load_dotenv()  # reads .env from cwd or any parent directory
@@ -46,26 +46,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("kisanagent.inference")
 
-# ── Config (Groq defaults) ───────────────────────────────────────────────────
+# ── Config (Ollama defaults) ───────────────────────────────────────────────────
 ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8080")
 
-# Accept either API_KEY or GROQ_API_KEY env var
-API_KEY = (
-    os.getenv("API_KEY")
-    or os.getenv("GROQ_API_KEY")
-    or "sk-placeholder"
-)
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5-coder:7b")
 DIFFICULTY = os.getenv("DIFFICULTY", "medium")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 
-# ── Groq OpenAI-compatible client ────────────────────────────────────────────
-client = OpenAI(
-    api_key=API_KEY,
-    base_url=API_BASE_URL,
-)
-
-logger.info("KisanAgent inference using model=%s  base_url=%s", MODEL_NAME, API_BASE_URL)
+logger.info("KisanAgent inference using Ollama model=%s  url=%s", MODEL_NAME, OLLAMA_URL)
 
 # ── System Prompt ────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are KisanAgent, an AI agricultural advisor for Harish — a 
@@ -194,20 +182,24 @@ def llm_call(
     retries: int = 3,
 ) -> str:
     """
-    Groq (OpenAI-compatible) call with exponential backoff.
-    Requests JSON object response mode — supported by all Groq Llama models.
-    Falls back to plain completion if JSON mode rejected.
+    Ollama API call with exponential backoff.
+    Requests JSON object response mode.
     """
     for attempt in range(retries):
         try:
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                temperature=0.3,
-                max_tokens=512,
-                response_format={"type": "json_object"},
+            response = requests.post(
+                OLLAMA_URL,
+                json={
+                    "model": MODEL_NAME,
+                    "messages": messages,
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=60
             )
-            content = response.choices[0].message.content
+            response.raise_for_status()
+            content = response.json()["message"]["content"]
+            
             # Validate parseable before returning
             json.loads(content)  # raises if invalid
             return content
