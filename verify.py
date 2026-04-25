@@ -1,6 +1,6 @@
 """
 KisanAgent -- Quick verification script.
-Tests Groq connectivity + 3-day agent episode.
+Tests Ollama connectivity + 3-day agent episode.
 Run: uv run python verify.py
 """
 import os
@@ -16,9 +16,9 @@ if sys.platform == "win32":
 
 load_dotenv()
 
-API_KEY = os.getenv("API_KEY") or os.getenv("LLM_API_KEY")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://integrate.api.nvidia.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "google/gemma-3n-e4b-it")
+API_KEY = os.getenv("API_KEY") or os.getenv("LLM_API_KEY") or "ollama"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:11434/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5-coder:7b")
 ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8000")
 
 print("=" * 60)
@@ -33,9 +33,9 @@ print()
 client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 
 # --------------------------------------------------------------------------
-# Test 1: Groq API connectivity
+# Test 1: Ollama API connectivity
 # --------------------------------------------------------------------------
-print("[1/4] Testing Groq API connectivity...")
+print("[1/4] Testing Ollama API connectivity...")
 try:
     resp = client.chat.completions.create(
         model=MODEL_NAME,
@@ -49,10 +49,10 @@ try:
     )
     content = resp.choices[0].message.content
     parsed = json.loads(content)
-    print(f"  [OK] Groq OK -- model={MODEL_NAME}")
+    print(f"  [OK] Ollama OK -- model={MODEL_NAME}")
     print(f"       Response: {parsed}")
 except Exception as e:
-    print(f"  [FAIL] Groq FAILED: {e}")
+    print(f"  [FAIL] Ollama FAILED: {e}")
     raise
 
 # --------------------------------------------------------------------------
@@ -93,9 +93,9 @@ for tool_name in ["weather", "soil", "mandi_price", "govt_scheme", "pest_alert",
         print(f"  [FAIL] {tool_name}: {e}")
 
 # --------------------------------------------------------------------------
-# Test 4: 3-day agent episode with Groq ReAct loop
+# Test 4: 3-day agent episode with Ollama ReAct loop
 # --------------------------------------------------------------------------
-print("\n[4/4] Running 3-day agent episode (Groq google/gemma-3n-e4b-it)...")
+print(f"\n[4/4] Running 3-day agent episode (Ollama {MODEL_NAME})...")
 
 r = requests.post(
     f"{ENV_SERVER}/reset",
@@ -207,5 +207,5 @@ for day_iter in range(3):
 print()
 print("=" * 60)
 print("ALL VERIFICATION TESTS PASSED")
-print(f"KisanAgent fully operational -- Groq {MODEL_NAME}")
+print(f"KisanAgent fully operational -- Ollama {MODEL_NAME}")
 print("=" * 60)

@@ -3,20 +3,20 @@ KisanAgent Inference Script
 =============================
 Agent entry point — mirrors Round 1 inference.py pattern exactly.
 
-- Uses openai SDK (Groq-compatible via openai base_url)
+- Uses openai SDK (Ollama-compatible via openai base_url)
 - Auto-loads from .env via python-dotenv
 - Retry logic with exponential backoff
 - Full ReAct loop: calls tools → decides → steps env
 - Calls /reset → loop(/tools/{name} + /step) → prints final scores
 
-Groq endpoint: https://integrate.api.nvidia.com/v1
-Default model: google/gemma-3n-e4b-it
+Ollama endpoint: http://localhost:11434/v1
+Default model: qwen2.5-coder:7b
 
 Environment variables (loaded from .env automatically):
   ENV_SERVER_URL  — KisanAgent FastAPI server (default: http://localhost:8000)
-  API_KEY         — Groq API key (LLM_API_KEY also accepted)
-  API_BASE_URL    — Groq base URL (default: https://integrate.api.nvidia.com/v1)
-  MODEL_NAME      — Groq model (default: google/gemma-3n-e4b-it)
+  API_KEY         — Ollama API key (LLM_API_KEY also accepted)
+  API_BASE_URL    — Ollama base URL (default: http://localhost:11434/v1)
+  MODEL_NAME      — Ollama model (default: qwen2.5-coder:7b)
   DIFFICULTY      — Season difficulty: easy | medium | hard
 """
 
@@ -46,20 +46,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger("kisanagent.inference")
 
-# ── Config (Groq defaults) ───────────────────────────────────────────────────
+# ── Config (Ollama defaults) ─────────────────────────────────────────────────
 ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:7860")
 
 # Accept either API_KEY or LLM_API_KEY env var
 API_KEY = (
     os.getenv("API_KEY")
     or os.getenv("LLM_API_KEY")
-    or "sk-placeholder"
+    or "ollama"
 )
-API_BASE_URL = os.getenv("API_BASE_URL", "https://integrate.api.nvidia.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "google/gemma-3n-e4b-it")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:11434/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5-coder:7b")
 DIFFICULTY = os.getenv("DIFFICULTY", "medium")
 
-# ── Groq OpenAI-compatible client ────────────────────────────────────────────
+# ── Ollama OpenAI-compatible client ──────────────────────────────────────────
 client = OpenAI(
     api_key=API_KEY,
     base_url=API_BASE_URL,
@@ -202,8 +202,8 @@ def llm_call(
     retries: int = 3,
 ) -> str:
     """
-    Groq (OpenAI-compatible) call with exponential backoff.
-    Requests JSON object response mode — supported by all Groq Llama models.
+    Ollama (OpenAI-compatible) call with exponential backoff.
+    Requests JSON object response mode — supported by Ollama models.
     Falls back to plain completion if JSON mode rejected.
     """
     for attempt in range(retries):
@@ -361,7 +361,9 @@ def run_episode(
         farm_decision: Optional[str] = None
         day_reasoning: str = ""
 
-        while farm_decision is None:
+        turn_count = 0
+        while farm_decision is None and turn_count < 7:
+            turn_count += 1
             raw = llm_call(messages)
             parsed = _safe_parse_llm(raw)
 
@@ -403,7 +405,10 @@ def run_episode(
 
             if tool_to_call and not farm_decision:
                 # Call the tool
-                tool_result = call_tool(tool_to_call, session_id)
+                if len(tool_calls_made) >= 3:
+                    tool_result = {"error": "tool_budget_exceeded"}
+                else:
+                    tool_result = call_tool(tool_to_call, session_id)
 
                 if tool_result.get("error") == "tool_budget_exceeded":
                     # Force the agent to decide
@@ -437,6 +442,11 @@ def run_episode(
                 # LLM gave neither — force do_nothing
                 logger.warning("LLM gave neither tool nor decision; defaulting to do_nothing.")
                 farm_decision = "do_nothing"
+                
+        if farm_decision is None:
+            logger.warning("LLM failed to provide a farm_decision after 7 turns. Defaulting to do_nothing.")
+            farm_decision = "do_nothing"
+            day_reasoning = "Forced default action due to tool loop timeout."
 
         # ── Step the environment ─────────────────────────────────
         try:
