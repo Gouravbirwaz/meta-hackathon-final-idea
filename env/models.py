@@ -11,9 +11,10 @@ Mirrors Round 1 multi-dimensional grader pattern.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from openenv.core.env_server import Action, Observation, State
 
 
 # ─────────────────────────────────────────────────────────────
@@ -98,7 +99,8 @@ class StepRequest(BaseModel):
     Submit exactly one farm_decision alongside any tool calls made.
     """
 
-    farm_decision: FarmDecision = Field(
+    farm_decision: Optional[FarmDecision] = Field(
+        default=None,
         description="One of 8 atomic farm decisions for today.",
     )
     tool_calls_made: List[str] = Field(
@@ -147,13 +149,39 @@ class ToolRequest(BaseModel):
 
     model_config = {"json_schema_extra": {"example": {"args": {"days_ahead": 3}}}}
 
+class KisanAction(Action):
+    """Unified OpenEnv action for KisanAgent."""
+    farm_decision: Optional[FarmDecision] = Field(
+        default=None,
+        description="One of 8 atomic farm decisions to execute this day.",
+    )
+    tool_name: Optional[ToolName] = Field(
+        default=None,
+        description="If calling a tool, specify the tool name here.",
+    )
+    tool_args: Optional[Union[Dict[str, Any], str]] = Field(
+        default=None,
+        description="Arguments for the tool (JSON string or dict).",
+    )
+    reasoning: Optional[str] = Field(
+        default=None,
+        description="Agent's chain-of-thought.",
+    )
+
+class KisanState(State):
+    """Internal state for debugging."""
+    season_state: Dict[str, Any]
+    event_schedule: Dict[str, Any]
+    simulator_state: Dict[str, Any]
+    grader_state: Dict[str, Any]
+
 
 # ─────────────────────────────────────────────────────────────
 # OBSERVATION MODEL
 # ─────────────────────────────────────────────────────────────
 
 
-class FarmerObservation(BaseModel):
+class FarmerObservation(Observation):
     """
     The agent's window onto the farm world.
     All sensor readings are noisy — ground truth lives in FarmSimulator.

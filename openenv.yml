@@ -1,0 +1,40 @@
+version: "1"
+
+project:
+  name: "kisanagent"
+  version: "1.0.0"
+  description: "RL Environment for Indian Smallholder Farm Advisory — Meta-PyTorch OpenEnv Hackathon Finale 2026"
+  authors:
+    - "KisanAgent Team"
+  license: "MIT"
+  tags:
+    - "reinforcement-learning"
+    - "agriculture"
+    - "openenv"
+    - "llm-agent"
+
+server:
+  type: "fastapi"
+  port: 7860
+  healthcheck: "/health"
+  startup_command: "uvicorn server.app:app --host 0.0.0.0 --port 7860 --workers 1"
+
+endpoints:
+  reset:
+    path: "/reset"
+    method: "POST"
+  step:
+    path: "/step"
+    method: "POST"
+  health:
+    path: "/health"
+    method: "GET"
+  state:
+    path: "/state"
+    method: "GET"
+
+
+build:
+  dockerfile: "Dockerfile"
+  context: "."
+

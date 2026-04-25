@@ -16,9 +16,9 @@ if sys.platform == "win32":
 
 load_dotenv()
 
-API_KEY = os.getenv("API_KEY") or os.getenv("GROQ_API_KEY")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+API_KEY = os.getenv("API_KEY") or os.getenv("LLM_API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://integrate.api.nvidia.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "google/gemma-3n-e4b-it")
 ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8000")
 
 print("=" * 60)
@@ -43,9 +43,9 @@ try:
             {"role": "system", "content": "Reply only with valid JSON."},
             {"role": "user", "content": 'Return: {"status": "ok", "agent": "KisanAgent"}'},
         ],
-        temperature=0.1,
+        temperature=0.2,
+        top_p=0.7,
         max_tokens=64,
-        response_format={"type": "json_object"},
     )
     content = resp.choices[0].message.content
     parsed = json.loads(content)
@@ -95,7 +95,7 @@ for tool_name in ["weather", "soil", "mandi_price", "govt_scheme", "pest_alert",
 # --------------------------------------------------------------------------
 # Test 4: 3-day agent episode with Groq ReAct loop
 # --------------------------------------------------------------------------
-print("\n[4/4] Running 3-day agent episode (Groq llama-3.3-70b-versatile)...")
+print("\n[4/4] Running 3-day agent episode (Groq google/gemma-3n-e4b-it)...")
 
 r = requests.post(
     f"{ENV_SERVER}/reset",
@@ -137,13 +137,24 @@ for day_iter in range(3):
         llm_resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
-            temperature=0.3,
+            temperature=0.2,
+            top_p=0.7,
             max_tokens=256,
-            response_format={"type": "json_object"},
         )
         raw = llm_resp.choices[0].message.content
-        parsed = json.loads(raw)
-        messages.append({"role": "assistant", "content": raw})
+        
+        # Strip markdown fences if present
+        clean_raw = raw.strip()
+        if clean_raw.startswith("```json"):
+            clean_raw = clean_raw[7:]
+        if clean_raw.startswith("```"):
+            clean_raw = clean_raw[3:]
+        if clean_raw.endswith("```"):
+            clean_raw = clean_raw[:-3]
+        clean_raw = clean_raw.strip()
+        
+        parsed = json.loads(clean_raw)
+        messages.append({"role": "assistant", "content": clean_raw})
 
         reasoning = parsed.get("reasoning", "")
         tool = parsed.get("tool_to_call")
