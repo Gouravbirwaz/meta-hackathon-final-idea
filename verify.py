@@ -16,8 +16,9 @@ if sys.platform == "win32":
 
 load_dotenv()
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
-MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5-coder:7b")
+API_KEY = os.getenv("API_KEY") or os.getenv("GROQ_API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8000")
 
 print("=" * 60)
@@ -33,21 +34,17 @@ print()
 # --------------------------------------------------------------------------
 print("[1/4] Testing Ollama API connectivity...")
 try:
-    resp = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL_NAME,
-            "messages": [
-                {"role": "system", "content": "Reply only with valid JSON."},
-                {"role": "user", "content": 'Return: {"status": "ok", "agent": "KisanAgent"}'},
-            ],
-            "stream": False,
-            "format": "json"
-        },
-        timeout=30
+    resp = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[
+            {"role": "system", "content": "Reply only with valid JSON."},
+            {"role": "user", "content": 'Return: {"status": "ok", "agent": "KisanAgent"}'},
+        ],
+        temperature=0.1,
+        max_tokens=64,
+        response_format={"type": "json_object"},
     )
-    resp.raise_for_status()
-    content = resp.json()["message"]["content"]
+    content = resp.choices[0].message.content
     parsed = json.loads(content)
     print(f"  [OK] Ollama OK -- model={MODEL_NAME}")
     print(f"       Response: {parsed}")
@@ -95,7 +92,7 @@ for tool_name in ["weather", "soil", "mandi_price", "govt_scheme", "pest_alert",
 # --------------------------------------------------------------------------
 # Test 4: 3-day agent episode with Ollama ReAct loop
 # --------------------------------------------------------------------------
-print(f"\n[4/4] Running 3-day agent episode (Ollama {MODEL_NAME})...")
+print("\n[4/4] Running 3-day agent episode (Groq llama-3.3-70b-versatile)...")
 
 r = requests.post(
     f"{ENV_SERVER}/reset",
@@ -134,18 +131,14 @@ for day_iter in range(3):
 
     # ReAct inner loop (max 5 turns)
     for _ in range(5):
-        llm_resp = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL_NAME,
-                "messages": messages,
-                "stream": False,
-                "format": "json"
-            },
-            timeout=60
+        llm_resp = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=256,
+            response_format={"type": "json_object"},
         )
-        llm_resp.raise_for_status()
-        raw = llm_resp.json()["message"]["content"]
+        raw = llm_resp.choices[0].message.content
         parsed = json.loads(raw)
         messages.append({"role": "assistant", "content": raw})
 
