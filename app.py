@@ -33,7 +33,46 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         gr.Markdown("This dashboard shows the inner stability and confidence of the GRPO algorithm.")
         gr.Image(DEEP_INSIGHT_URL, label="Inner Model Heartbeat (Technical)")
         
-    with gr.Tab("🧠 Agent Architecture"):
+import torch
+
+# --- HYBRID INFERENCE ENGINE ---
+def smart_llm_call(messages):
+    # 1. Try Proper Unsloth Method (If GPU exists)
+    if torch.cuda.is_available():
+        try:
+            from unsloth import FastLanguageModel
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name="gouravbirwaz/kisanagent-trained-model",
+                load_in_4bit=True,
+            )
+            FastLanguageModel.for_inference(model)
+            
+            input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to("cuda")
+            outputs = model.generate(input_ids, max_new_tokens=128, temperature=0.1)
+            return tokenizer.decode(outputs[0][len(input_ids[0]):], skip_special_tokens=True)
+        except Exception as e:
+            print(f"GPU Load failed, falling back: {e}")
+
+    # 2. Fallback to Cloud API (For Free Spaces / CPU)
+    import requests
+    API_URL = "https://api-inference.huggingface.co/models/gouravbirwaz/kisanagent-trained-model"
+    headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
+    
+    # Simple format for Cloud API
+    prompt = "".join([f"{m['role']}: {m['content']}\n" for m in messages]) + "assistant: "
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt, "parameters": {"max_new_tokens": 128}})
+    
+    if response.status_code == 200:
+        res = response.json()
+        return res[0]['generated_text'] if isinstance(res, list) else res.get('generated_text', "Error")
+    
+    return "The agent is thinking... (Cloud API Warming Up)"
+
+# Patch the main inference logic
+import inference
+inference.llm_call = smart_llm_call
+
+with gr.Tab("🧠 Agent Architecture"):
         gr.Markdown("""
         - **Model**: Qwen-2.5-7B (LoRA Trained)
         - **Algorithm**: GRPO (Group Relative Policy Optimization)
@@ -41,7 +80,7 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         - **Reward**: 3-Tier (Format + Interaction + Economic Strategy)
         """)
     
-    with gr.Tab("🚀 Live Environment"):
+with gr.Tab("🚀 Live Environment"):
         gr.Markdown("The OpenEnv FastAPI server is running in the background.")
         gr.Markdown(f"Endpoint: `0.0.0.0:{os.getenv('PORT', 7860)}`")
 

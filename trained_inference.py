@@ -1,74 +1,55 @@
 import os
 import json
-import requests
-import time
-from inference import run_episode, SYSTEM_PROMPT
+import torch
+from inference import run_episode
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # --- CONFIG ---
-# This points to your online model on Hugging Face
 MODEL_NAME = "gouravbirwaz/kisanagent-trained-model"
-HF_TOKEN = os.getenv("HF_TOKEN")
 
-if not HF_TOKEN:
-    print("❌ ERROR: HF_TOKEN not found in .env!")
-    exit(1)
+print(f"🚀 Loading Trained KisanAgent using PROPER method (Unsloth)...")
 
-print(f"🚀 Connecting to Trained KisanAgent on HF Cloud: {MODEL_NAME}...")
-
-def trained_llm_call(messages, retries=5):
-    # Use the official HF Inference API
-    API_URL = f"https://api-inference.huggingface.co/models/{MODEL_NAME}"
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+try:
+    from unsloth import FastLanguageModel
     
-    # Format for Qwen
-    prompt = ""
-    for msg in messages:
-        role = msg["role"]
-        content = msg["content"]
-        prompt += f"<|im_start|>{role}\n{content}<|im_end|>\n"
-    prompt += "<|im_start|>assistant\n"
+    # Load model and tokenizer
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=MODEL_NAME,
+        load_in_4bit=True, # Efficient 4-bit loading
+    )
+    FastLanguageModel.for_inference(model) # Enable 2x faster inference
+    
+    def trained_llm_call(messages):
+        # Format using the proper chat template
+        input_ids = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to("cuda") # This REQUIRES a GPU
 
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 128,
-            "temperature": 0.1,
-            "top_p": 0.9,
-            "return_full_text": False
-        }
-    }
+        outputs = model.generate(
+            input_ids, 
+            max_new_tokens=128,
+            temperature=0.1,
+            top_p=0.9,
+            use_cache=True
+        )
+        
+        response = tokenizer.decode(outputs[0][len(input_ids[0]):], skip_special_tokens=True)
+        return response
 
-    for attempt in range(retries):
-        try:
-            response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
-            
-            # 503 means model is loading
-            if response.status_code == 503:
-                print(f"⏳ Model is loading on HF Cloud... waiting 20s (Attempt {attempt+1})")
-                time.sleep(20)
-                continue
-            
-            if response.status_code != 200:
-                print(f"❌ HF API Error ({response.status_code}): {response.text}")
-                return json.dumps({"reasoning": "Cloud is busy", "farm_decision": "do_nothing"})
-                
-            result = response.json()
-            # Handle list or dict response
-            text = result[0].get("generated_text", "") if isinstance(result, list) else result.get("generated_text", "")
+    print("✅ Model loaded successfully on GPU!")
 
-            # Extract JSON
-            if "{" in text:
-                text = text[text.find("{"):text.rfind("}")+1]
-            return text
-            
-        except Exception as e:
-            print(f"⚠️ Connection Error: {e}")
-            time.sleep(2)
-            
-    return json.dumps({"reasoning": "Timeout", "farm_decision": "do_nothing"})
+except ImportError:
+    print("⚠️ Unsloth not installed. Please install it to use the PRO method.")
+    exit(1)
+except Exception as e:
+    print(f"❌ Error loading on local hardware: {e}")
+    print("\n💡 NOTE: This 'Proper Method' requires an NVIDIA GPU and 'unsloth' installed.")
+    print("For the Hackathon demo, we will use the Cloud Fallback in the Space.")
+    exit(1)
 
 # Patch the inference loop
 import inference
@@ -77,6 +58,6 @@ inference.llm_call = trained_llm_call
 
 if __name__ == "__main__":
     print("\n" + "="*50)
-    print("🌟 KISANAGENT TRAINED MODEL DEMO (CLOUD) 🌟")
+    print("🌟 KISANAGENT TRAINED MODEL DEMO (PRO) 🌟")
     print("="*50)
     run_episode(difficulty="medium", verbose=True)
