@@ -33,8 +33,12 @@ def smart_llm_call(messages):
         except Exception: pass
 
     # Cloud Fallback
+    hf_token = os.getenv('HF_TOKEN')
+    if not hf_token:
+        return "❌ Error: HF_TOKEN is missing. Please add it to your Space Secrets to enable inference."
+        
     API_URL = "https://api-inference.huggingface.co/models/gouravbirwaz/kisanagent-trained-model"
-    headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
+    headers = {"Authorization": f"Bearer {hf_token}"}
     prompt = "".join([f"{m['role']}: {m['content']}\n" for m in messages]) + "assistant: "
     try:
         response = requests.post(API_URL, headers=headers, json={"inputs": prompt, "parameters": {"max_new_tokens": 128}}, timeout=10)
@@ -69,8 +73,8 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     with gr.Tab("🚀 Live Environment"):
         gr.Markdown("### Official OpenEnv Interaction")
         gr.Markdown("Interact with the KisanEnv directly using the official buttons and state viewer below.")
-        # Using ./env-ui/ with a trailing slash is more robust on HF Spaces
-        gr.HTML('<iframe src="./env-ui/" width="100%" height="800px" style="border:2px solid #2ecc71; border-radius:10px;"></iframe>')
+        # Pointing to the absolute path from the Space root
+        gr.HTML('<iframe src="/env-ui/" width="100%" height="800px" style="border:2px solid #2ecc71; border-radius:10px;"></iframe>')
 
     with gr.Tab("🧠 Architecture"):
         gr.Markdown("- **Model**: Qwen-2.5-7B (LoRA) | **RL**: GRPO | **Framework**: OpenEnv")
@@ -78,14 +82,16 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
 # --- 4. MOUNTING & LAUNCHING ---
 main_app = FastAPI()
 
-# A. Get the official UI app (This returns a FastAPI app)
-# We set root_path so it knows it's mounted at /env-ui
+# A. Get the official UI app
 openenv_ui_app = create_web_interface_app(KisanEnvironment, KisanAction, FarmerObservation)
 
-# B. Mount the official UI using FastAPI's native mount
+# B. IMPORTANT: Set the root_path so the sub-app knows it lives at /env-ui
+openenv_ui_app.root_path = "/env-ui"
+
+# C. Mount the official UI using FastAPI's native mount
 main_app.mount("/env-ui", openenv_ui_app)
 
-# C. Mount our custom Gradio dashboard at the root
+# D. Mount our custom Gradio dashboard at the root
 main_app = gr.mount_gradio_app(main_app, demo, path="/")
 
 if __name__ == "__main__":
