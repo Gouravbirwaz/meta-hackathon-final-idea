@@ -5,7 +5,7 @@ import torch
 import requests
 from fastapi import FastAPI
 import uvicorn
-from env.models import KisanEnv
+from server.app import KisanEnvironment
 from openenv.core.env_server import create_web_interface_app
 
 # --- 1. DATA & CONFIG ---
@@ -68,7 +68,6 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     with gr.Tab("🚀 Live Environment"):
         gr.Markdown("### Official OpenEnv Interaction")
         gr.Markdown("Interact with the KisanEnv directly using the official buttons and state viewer below.")
-        # Embed the mounted OpenEnv UI
         gr.HTML('<iframe src="./env-ui/" width="100%" height="800px" style="border:2px solid #2ecc71; border-radius:10px;"></iframe>')
 
     with gr.Tab("🧠 Architecture"):
@@ -77,11 +76,15 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
 # --- 4. MOUNTING & LAUNCHING ---
 main_app = FastAPI()
 
-# A. Create the environment and official UI
-kisan_env = KisanEnv(difficulty="medium")
-openenv_ui = create_web_interface_app(kisan_env)
+# Create the environment instance
+# In server/app.py, KisanEnvironment takes no args in __init__
+kisan_env = KisanEnvironment()
 
-# B. Mount everything
+# Get the official UI app
+from env.models import KisanAction, FarmerObservation
+openenv_ui = create_web_interface_app(KisanEnvironment, KisanAction, FarmerObservation)
+
+# Mount everything
 main_app = gr.mount_gradio_app(main_app, demo, path="/")
 main_app = gr.mount_gradio_app(main_app, openenv_ui, path="/env-ui")
 
