@@ -1,0 +1,85 @@
+{
+  "district": "Kolar",
+  "state": "Karnataka",
+  "coordinates": {"lat": 13.13, "lon": 78.13},
+  "elevation_m": 914,
+  "data_source": "IMD Karnataka District Bulletin 2024-25",
+  "season_type": "Kharif + Rabi overlap (tomato)",
+  "total_season_days": 90,
+
+  "monsoon_phases": [
+    {
+      "phase": "pre_monsoon_dry",
+      "day_range": [0, 20],
+      "rain_probability": 0.05,
+      "temp_min_c": 32,
+      "temp_max_c": 38,
+      "rainfall_mm_range": [2, 8],
+      "humidity_pct_range": [30, 50],
+      "description": "Hot dry period before SW monsoon arrival. Risk of heat stress."
+    },
+    {
+      "phase": "sw_monsoon_active",
+      "day_range": [21, 45],
+      "rain_probability": 0.65,
+      "temp_min_c": 24,
+      "temp_max_c": 28,
+      "rainfall_mm_range": [15, 40],
+      "humidity_pct_range": [70, 90],
+      "description": "SW monsoon active. Heavy rain events. Risk of waterlogging and fungal disease."
+    },
+    {
+      "phase": "ne_monsoon_transition",
+      "day_range": [46, 75],
+      "rain_probability": 0.35,
+      "temp_min_c": 26,
+      "temp_max_c": 32,
+      "rainfall_mm_range": [5, 20],
+      "humidity_pct_range": [55, 75],
+      "description": "NE monsoon transition. Intermittent rain. Optimal for fruiting if soil managed."
+    },
+    {
+      "phase": "post_monsoon_dry",
+      "day_range": [76, 90],
+      "rain_probability": 0.08,
+      "temp_min_c": 28,
+      "temp_max_c": 34,
+      "rainfall_mm_range": [2, 6],
+      "humidity_pct_range": [40, 60],
+      "description": "Dry post-monsoon. Harvest window. Irrigation critical if rain fails."
+    }
+  ],
+
+  "special_events": {
+    "unseasonal_rain_probability": 0.15,
+    "unseasonal_rain_trigger": "any dry day",
+    "cyclone_risk_days": [35, 55],
+    "cyclone_probability": 0.03,
+    "hailstorm_risk_months": ["October", "November"],
+    "drought_probability_hard_season": 0.20
+  },
+
+  "historical_averages_kolar": {
+    "annual_rainfall_mm": 782,
+    "monsoon_onset_typical_day": 21,
+    "monsoon_withdrawal_typical_day": 72,
+    "hottest_month": "April",
+    "coolest_month": "December",
+    "record_max_temp_c": 42.1,
+    "record_min_temp_c": 10.2
+  },
+
+  "soil_evaporation_rates": {
+    "dry_day_evaporation_pct": 3.0,
+    "high_temp_bonus_pct": 1.0,
+    "rain_absorption_factor": 0.6,
+    "max_soil_moisture_pct": 95.0
+  },
+
+  "farmer_advisory_thresholds": {
+    "irrigate_below_moisture_pct": 55,
+    "waterlogging_above_moisture_pct": 80,
+    "critical_drought_moisture_pct": 40,
+    "frost_risk_temp_c": 12
+  }
+}

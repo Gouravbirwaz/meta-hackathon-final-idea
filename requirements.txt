@@ -1,0 +1,21 @@
+# --- Core Dependencies ---
+fastapi
+uvicorn
+requests
+python-dotenv
+gymnasium
+numpy
+pandas
+gradio
+
+# --- AI / LLM Dependencies ---
+torch
+transformers
+peft
+accelerate
+bitsandbytes
+scipy
+
+# --- OpenEnv Framework ---
+# (Assuming these are local or public)
+# openenv-core

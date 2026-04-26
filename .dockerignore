@@ -1,0 +1,46 @@
+# KisanAgent .dockerignore
+# Excludes unnecessary files from Docker build context
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Development tools
+.git/
+.gitignore
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Large training artifacts
+checkpoints/
+*.ckpt
+*.pt
+*.safetensors
+
+# Eval outputs (regenerated at runtime)
+eval/training_log.json
+eval/baseline_results.csv
+eval/*.png
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets
+.env
+*.key
+
+# We exclude all .md except README.md which is needed for build metadata
+*.md
+!README.md
