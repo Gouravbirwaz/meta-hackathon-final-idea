@@ -53,11 +53,16 @@ We didn't just fine-tune; we **Reinforced**.
 
 ---
 
-## 📈 Evidence of Learning
+### 📈 Evidence of Learning & Strategy
 The agent successfully learned to prioritize crop health and economic stability over the 90-day cycle.
 
-### Training Performance Dashboard
-![KisanAgent Analytical Dashboard](https://huggingface.co/gouravbirwaz/kisanagent-trained-model/resolve/main/training_analysis.png)
+<p align="center">
+  <img src="https://huggingface.co/gouravbirwaz/kisanagent-trained-model/resolve/main/training_analysis.png" width="45%" alt="Reward Convergence" />
+  <img src="https://huggingface.co/gouravbirwaz/kisanagent-trained-model/resolve/main/training_deep_insight.png" width="45%" alt="Deep Insight" />
+</p>
+<p align="center">
+  <img src="https://huggingface.co/gouravbirwaz/kisanagent-trained-model/resolve/main/training_progress.png" width="90%" alt="Training Progress" />
+</p>
 
 ### Summary of Results (Final Winning Run)
 | Epoch | Format Reward (Mean) | Kisan Reward (Mean) | Total Reward | Performance |
