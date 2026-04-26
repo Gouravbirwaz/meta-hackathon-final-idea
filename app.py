@@ -69,8 +69,8 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     with gr.Tab("🚀 Live Environment"):
         gr.Markdown("### Official OpenEnv Interaction")
         gr.Markdown("Interact with the KisanEnv directly using the official buttons and state viewer below.")
-        # Point Iframe to the mounted path
-        gr.HTML('<iframe src="/env-ui" width="100%" height="800px" style="border:2px solid #2ecc71; border-radius:10px;"></iframe>')
+        # Using ./env-ui/ with a trailing slash is more robust on HF Spaces
+        gr.HTML('<iframe src="./env-ui/" width="100%" height="800px" style="border:2px solid #2ecc71; border-radius:10px;"></iframe>')
 
     with gr.Tab("🧠 Architecture"):
         gr.Markdown("- **Model**: Qwen-2.5-7B (LoRA) | **RL**: GRPO | **Framework**: OpenEnv")
