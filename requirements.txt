@@ -14,7 +14,7 @@ transformers
 accelerate
 bitsandbytes
 unsloth @ git+https://github.com/unslothai/unsloth.git
-openenv @ git+https://github.com/huggingface/openenv.git
+openenv @ git+https://github.com/meta-pytorch/OpenEnv.git
 peft
 
 # --- OpenEnv Framework ---
