@@ -1,3 +1,13 @@
+---
+title: Neuroninjas KisanAgent
+emoji: 🍅
+colorFrom: green
+colorTo: brown
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🍅 KisanAgent: Empowering Climate-Resilient Agriculture with RL
 
 [![Meta-PyTorch Hackathon](https://img.shields.io/badge/Hackathon-Meta--PyTorch-blueviolet)](https://meta-pytorch.devpost.com/)
