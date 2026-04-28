@@ -14,7 +14,6 @@ build/
 # Virtual environments
 .venv/
 venv/
-env/
 
 # Development tools
 .git/
@@ -42,5 +41,6 @@ eval/*.png
 .env
 *.key
 
-# Docs (not needed in container)
+# We exclude all .md except README.md which is needed for build metadata
 *.md
+!README.md

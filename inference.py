@@ -9,14 +9,14 @@ Agent entry point — mirrors Round 1 inference.py pattern exactly.
 - Full ReAct loop: calls tools → decides → steps env
 - Calls /reset → loop(/tools/{name} + /step) → prints final scores
 
-Groq endpoint: https://api.groq.com/openai/v1
-Default model: llama-3.3-70b-versatile
+Groq endpoint: https://integrate.api.nvidia.com/v1
+Default model: google/gemma-3n-e4b-it
 
 Environment variables (loaded from .env automatically):
   ENV_SERVER_URL  — KisanAgent FastAPI server (default: http://localhost:8000)
-  API_KEY         — Groq API key (GROQ_API_KEY also accepted)
-  API_BASE_URL    — Groq base URL (default: https://api.groq.com/openai/v1)
-  MODEL_NAME      — Groq model (default: llama-3.3-70b-versatile)
+  API_KEY         — Groq API key (LLM_API_KEY also accepted)
+  API_BASE_URL    — Groq base URL (default: https://integrate.api.nvidia.com/v1)
+  MODEL_NAME      — Groq model (default: google/gemma-3n-e4b-it)
   DIFFICULTY      — Season difficulty: easy | medium | hard
 """
 
@@ -47,16 +47,16 @@ logging.basicConfig(
 logger = logging.getLogger("kisanagent.inference")
 
 # ── Config (Groq defaults) ───────────────────────────────────────────────────
-ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8080")
+ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:7860")
 
-# Accept either API_KEY or GROQ_API_KEY env var
+# Accept either API_KEY or LLM_API_KEY env var
 API_KEY = (
     os.getenv("API_KEY")
-    or os.getenv("GROQ_API_KEY")
+    or os.getenv("LLM_API_KEY")
     or "sk-placeholder"
 )
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://integrate.api.nvidia.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "google/gemma-3n-e4b-it")
 DIFFICULTY = os.getenv("DIFFICULTY", "medium")
 
 # ── Groq OpenAI-compatible client ────────────────────────────────────────────
@@ -122,6 +122,7 @@ Exactly one of tool_to_call or farm_decision must be non-null per response.
 
 def call_tool(
     tool_name: str,
+    session_id: str,
     args: Dict[str, Any] = None,
     retries: int = 3,
 ) -> Dict[str, Any]:
@@ -133,19 +134,24 @@ def call_tool(
     for attempt in range(retries):
         try:
             r = requests.post(
-                f"{ENV_SERVER}/tools/{tool_name}",
-                json={"args": args},
+                f"{ENV_SERVER}/step",
+                json={
+                    "session_id": session_id,
+                    "action": {"tool_name": tool_name, "tool_args": args, "reasoning": "Calling tool"}
+                },
                 timeout=15,
             )
-            if r.status_code == 429:
+            if r.status_code == 422:
+                logger.error("422 Validation Error: %s", r.text)
+                return {"error": "validation_error"}
+            r.raise_for_status()
+            obs = r.json().get("observation", {})
+            if "error" in obs.get("metadata", {}):
                 return {
                     "error": "tool_budget_exceeded",
-                    "message": r.json().get("detail", "Tool budget exceeded."),
+                    "message": obs["metadata"]["error"],
                 }
-            if r.status_code == 400:
-                return {"error": "no_season", "message": r.json().get("detail", "")}
-            r.raise_for_status()
-            return r.json()["result"]
+            return obs.get("last_tool_result", {})
         except Exception as exc:
             if attempt < retries - 1:
                 wait = 2 ** attempt
@@ -170,16 +176,18 @@ def reset_env(difficulty: str = "medium", seed: Optional[int] = None) -> Dict[st
 
 def step_env(
     farm_decision: str,
-    tool_calls_made: List[str],
     reasoning: str,
+    session_id: str,
 ) -> Dict[str, Any]:
     """POST /step — advance one day."""
     r = requests.post(
         f"{ENV_SERVER}/step",
         json={
-            "farm_decision": farm_decision,
-            "tool_calls_made": tool_calls_made,
-            "reasoning": reasoning,
+            "session_id": session_id,
+            "action": {
+                "farm_decision": farm_decision,
+                "reasoning": reasoning,
+            }
         },
         timeout=30,
     )
@@ -203,23 +211,40 @@ def llm_call(
             response = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=messages,
-                temperature=0.3,
+                temperature=0.2,
+                top_p=0.7,
                 max_tokens=512,
-                response_format={"type": "json_object"},
             )
             content = response.choices[0].message.content
+            # Strip markdown fences if present
+            clean_content = content.strip()
+            if clean_content.startswith("```json"):
+                clean_content = clean_content[7:]
+            if clean_content.startswith("```"):
+                clean_content = clean_content[3:]
+            if clean_content.endswith("```"):
+                clean_content = clean_content[:-3]
+            clean_content = clean_content.strip()
+            
             # Validate parseable before returning
-            json.loads(content)  # raises if invalid
-            return content
+            json.loads(clean_content)  # raises if invalid
+            return clean_content
         except json.JSONDecodeError:
             # Model returned non-JSON — retry with explicit instruction
             logger.warning("LLM returned non-JSON on attempt %d; retrying with JSON reminder.", attempt + 1)
             if attempt < retries - 1:
-                # Inject reminder into last user message copy
-                reminder_messages = messages + [{
-                    "role": "user",
-                    "content": "IMPORTANT: Your response MUST be valid JSON only. No prose, no markdown fences."
-                }]
+                # Inject reminder into last user message copy to avoid consecutive user messages
+                reminder_messages = list(messages)
+                if reminder_messages and reminder_messages[-1]["role"] == "user":
+                    reminder_messages[-1] = {
+                        "role": "user",
+                        "content": reminder_messages[-1]["content"] + "\n\nIMPORTANT: Your response MUST be valid JSON only. No prose, no markdown fences."
+                    }
+                else:
+                    reminder_messages.append({
+                        "role": "user",
+                        "content": "IMPORTANT: Your response MUST be valid JSON only. No prose, no markdown fences."
+                    })
                 messages = reminder_messages
                 time.sleep(1)
             else:
@@ -239,9 +264,19 @@ def llm_call(
 
 
 def _safe_parse_llm(raw: str) -> Dict[str, Any]:
-    """Parse LLM JSON response with fallback."""
+    """Parse LLM JSON response with fallback and markdown stripping."""
     try:
-        parsed = json.loads(raw)
+        # Strip markdown fences if the model included them
+        clean_raw = raw.strip()
+        if clean_raw.startswith("```json"):
+            clean_raw = clean_raw[7:]
+        if clean_raw.startswith("```"):
+            clean_raw = clean_raw[3:]
+        if clean_raw.endswith("```"):
+            clean_raw = clean_raw[:-3]
+        clean_raw = clean_raw.strip()
+        
+        parsed = json.loads(clean_raw)
         return parsed
     except json.JSONDecodeError:
         logger.error("LLM returned invalid JSON: %s", raw[:200])
@@ -274,11 +309,15 @@ def run_episode(
     # ── Reset environment ───────────────────────────────────────
     reset_data = reset_env(difficulty=difficulty, seed=seed)
     observation = reset_data["observation"]
-    season_id = reset_data["season_id"]
-    info = reset_data.get("info", {})
+    session_id = reset_data.get("session_id", "default")
+    
+    # Metadata contains the info in OpenEnv
+    info = observation.get("metadata", {})
+    season_id_meta = info.get("season_id", "N/A")
 
     if verbose:
-        print(f"Season ID: {season_id}")
+        print(f"Session ID (OpenEnv): {session_id}")
+        print(f"Season ID (Meta): {season_id_meta}")
         print(f"Optimal income: ₹{info.get('optimal_income_inr', 40000):,.0f}")
         print(f"Schemes available: {', '.join(info.get('schemes_available', []))}")
         print(f"Pest events scheduled: {info.get('pest_events_scheduled', 0)}\n")
@@ -336,11 +375,26 @@ def run_episode(
             if isinstance(farm_decision, str) and farm_decision.lower() in ("null", "none", "", "false"):
                 farm_decision = None
 
-            # Fallback for invalid decisions generated by the LLM
+            valid_tools = {
+                "weather", "soil", "mandi_price", "govt_scheme", "pest_alert", "credit"
+            }
             valid_decisions = {
                 "irrigate", "fertilize", "spray_pesticide", "sell_now", 
                 "hold_crop", "apply_scheme", "take_loan", "do_nothing"
             }
+
+            # If LLM put a decision in the tool field, swap it
+            if tool_to_call in valid_decisions and not farm_decision:
+                logger.warning("LLM put decision '%s' in tool_to_call; swapping to farm_decision.", tool_to_call)
+                farm_decision = tool_to_call
+                tool_to_call = None
+
+            # Ignore invalid tools
+            if tool_to_call and tool_to_call not in valid_tools:
+                logger.warning("LLM generated invalid tool '%s'; ignoring.", tool_to_call)
+                tool_to_call = None
+
+            # Fallback for invalid decisions generated by the LLM
             if farm_decision and farm_decision not in valid_decisions:
                 logger.warning("LLM generated invalid decision '%s'; defaulting to 'do_nothing'", farm_decision)
                 farm_decision = "do_nothing"
@@ -349,7 +403,7 @@ def run_episode(
 
             if tool_to_call and not farm_decision:
                 # Call the tool
-                tool_result = call_tool(tool_to_call)
+                tool_result = call_tool(tool_to_call, session_id)
 
                 if tool_result.get("error") == "tool_budget_exceeded":
                     # Force the agent to decide
@@ -388,20 +442,19 @@ def run_episode(
         try:
             step_result = step_env(
                 farm_decision=farm_decision,
-                tool_calls_made=tool_calls_made,
                 reasoning=day_reasoning,
+                session_id=session_id,
             )
         except Exception as exc:
             logger.error("Step failed on day %d: %s", day, exc)
             break
 
         observation = step_result["observation"]
-        reward = step_result["reward"]
-        terminated = step_result["terminated"]
+        reward = step_result.get("reward") or 0.0
+        terminated = step_result.get("done", False) or step_result.get("terminated", False)
         episode_rewards.append(reward)
 
         if verbose:
-            step_sc = step_result.get("step_scores") or {}
             print(
                 f"   ↳ {farm_decision:<18} | tools: {tool_calls_made} | "
                 f"reward: {reward:.3f}"
@@ -409,8 +462,9 @@ def run_episode(
 
         # ── Terminal ─────────────────────────────────────────────
         if terminated:
-            final_scores = step_result.get("final_scores", {})
-            net_income = step_result.get("net_income_inr", 0.0)
+            meta = observation.get("metadata", {})
+            final_scores = meta.get("final_scores", {})
+            net_income = meta.get("net_income_inr", 0.0)
 
             if verbose:
                 print(f"\n{'═'*55}")

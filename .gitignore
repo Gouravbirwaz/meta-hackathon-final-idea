@@ -1,2 +1,23 @@
+# Environment
 .env
-assets/*
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Project Specific
+checkpoints/
+eval/training_log.json
+eval/training_progress.png
+modify_notebook.py
+rebuild_notebook.py
+
+# Keep data assets
+!assets/*.json*
+training_analysis.png
+training_deep_insight.png
+training_dashboard.png

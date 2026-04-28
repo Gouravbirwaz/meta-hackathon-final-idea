@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("kisanagent.eval")
 
-ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:8000")
+ENV_SERVER = os.getenv("ENV_SERVER_URL", "http://localhost:7860")
 
 DECISIONS = [
     "irrigate", "fertilize", "spray_pesticide", "sell_now",

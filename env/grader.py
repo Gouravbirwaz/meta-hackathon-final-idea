@@ -211,9 +211,9 @@ class KisanGrader:
         """
         expected = self.DECISION_TOOL_MAP.get(action, [])
 
-        # do_nothing correctly requires no tools
+        # do_nothing correctly requires no tools, but is neutral (0.5) to prevent reward hacking
         if action == "do_nothing":
-            return 1.0 if not tool_calls else 0.8  # slight penalty for wasting budget
+            return 0.5 if not tool_calls else 0.2  # penalty for wasting budget on nothing
 
         if not tool_calls:
             return 0.0  # blind decision
@@ -247,7 +247,7 @@ class KisanGrader:
         if pest_level == "CRITICAL" and action == "spray_pesticide":
             return 1.0
 
-        return 0.7  # neutral / uninvolved
+        return 0.5  # neutral / uninvolved
 
     def _score_episode_tool_quality(
         self, episode_log: List[Dict[str, Any]]
